@@ -1,7 +1,42 @@
 import _ from 'underscore';
 import { timeAgo } from './helpers';
 
-function directorySearch(config, cb) {
+function directorySearch() {
+	const searchConfig = {
+		text: this.searchText.get(),
+		type: this.searchType.get(),
+		sortBy: this.searchSortBy.get(),
+		sortDirection: this.sortDirection.get(),
+		limit: this.limit.get(),
+		page: this.page.get(),
+	};
+
+	if (this.end.get() || this.loading) {
+		return;
+	}
+
+	this.loading = true;
+
+	this.isLoading.set(true);
+
+	doDirectorySearch(searchConfig, (result) => { // eslint-disable-line no-use-before-define
+		this.loading = false;
+		this.isLoading.set(false);
+		this.end.set(!result);
+
+		if (!Array.isArray(result)) {
+			result = [];
+		}
+
+		if (this.page.get() > 0) {
+			return this.results.set([...this.results.get(), ...result]);
+		}
+
+		return this.results.set(result);
+	});
+}
+
+function doDirectorySearch(config, cb) {
 	return Meteor.call('browseChannels', config, (err, result) => {
 		cb(result && result.results && result.results.length && result.results.map((result) => {
 			if (config.type === 'channels') {
@@ -23,12 +58,24 @@ function directorySearch(config, cb) {
 					createdAt: timeAgo(result.createdAt),
 				};
 			}
+
+			if (config.type === 'federated_users') {
+				return {
+					name: result.name,
+					username: result.username,
+					createdAt: timeAgo(result.createdAt),
+					peer: result.federation.peer,
+				};
+			}
 			return null;
 		}));
 	});
 }
 
 Template.directory.helpers({
+	tAddUser() {
+		return t('Add_user');
+	},
 	searchText() {
 		return Template.instance().searchText.get();
 	},
@@ -63,24 +110,37 @@ Template.directory.helpers({
 			end,
 			page,
 		} = Template.instance();
+
+		const tabs = [
+			{
+				label: t('Channels'),
+				value: 'channels',
+				condition() {
+					return true;
+				},
+				active: true,
+			},
+			{
+				label: t('Users'),
+				value: 'users',
+				condition() {
+					return true;
+				},
+			},
+		];
+
+		if (!!RocketChat.settings.get('FEDERATION_Enabled') === true) {
+			tabs.push({
+				label: t('Federated Users'),
+				value: 'federated_users',
+				condition() {
+					return true;
+				},
+			});
+		}
+
 		return {
-			tabs: [
-				{
-					label: t('Channels'),
-					value: 'channels',
-					condition() {
-						return true;
-					},
-					active: true,
-				},
-				{
-					label: t('Users'),
-					value: 'users',
-					condition() {
-						return true;
-					},
-				},
-			],
+			tabs,
 			onChange(value) {
 				results.set([]);
 				end.set(false);
@@ -155,37 +215,31 @@ Template.directory.events({
 		t.page.set(0);
 		t.searchText.set(e.currentTarget.value);
 	}, 300),
+	'click .js-add'(e, instance) {
+		const email = $('[name=add-federated-user]').val();
+
+		$('[name=add-federated-user]').attr('disabled', true);
+		$('.js-add').attr('disabled', true);
+
+		Meteor.call('federationInviteUser', email, (error) => {
+			$('[name=add-federated-user]').val('');
+			$('[name=add-federated-user]').removeAttr('disabled');
+			$('.js-add').removeAttr('disabled');
+
+			if (error) {
+				return alert(error.reason);
+			}
+
+			// Reload
+			instance.end.set(false);
+			directorySearch.call(instance);
+		});
+	},
 });
 
 Template.directory.onRendered(function() {
 	Tracker.autorun(() => {
-		const searchConfig = {
-			text: this.searchText.get(),
-			type: this.searchType.get(),
-			sortBy: this.searchSortBy.get(),
-			sortDirection: this.sortDirection.get(),
-			limit: this.limit.get(),
-			page: this.page.get(),
-		};
-		if (this.end.get() || this.loading) {
-			return;
-		}
-		this.loading = true;
-		this.isLoading.set(true);
-		directorySearch(searchConfig, (result) => {
-			this.loading = false;
-			this.isLoading.set(false);
-			this.end.set(!result);
-
-			if (!Array.isArray(result)) {
-				result = [];
-			}
-
-			if (this.page.get() > 0) {
-				return this.results.set([...this.results.get(), ...result]);
-			}
-			return this.results.set(result);
-		});
+		directorySearch.call(this);
 	});
 });
 

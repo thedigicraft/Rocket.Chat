@@ -47,7 +47,7 @@ Meteor.methods({
 		const now = new Date();
 
 		// Make sure we have a room
-		RocketChat.models.Rooms.upsert({
+		const roomUpsertResult = RocketChat.models.Rooms.upsert({
 			_id: rid,
 		}, {
 			$set: {
@@ -119,6 +119,13 @@ Meteor.methods({
 				...toNotificationPref,
 			},
 		});
+
+		// If the room is new, run a callback
+		if (roomUpsertResult.insertedId) {
+			const insertedRoom = RocketChat.models.Rooms.findOneById(rid);
+
+			RocketChat.callbacks.run('afterCreateDirectRoom', insertedRoom, { from: me, to });
+		}
 
 		return {
 			rid,
