@@ -136,6 +136,45 @@ describe('[Users]', function() {
 		});
 	});
 
+	describe('[/users.register]', () => {
+		const email = `email@email${ Date.now() }.com`;
+		const username = `myusername${ Date.now() }`;
+		it('should register new user', (done) => {
+			request.post(api('users.register'))
+				.send({
+					email,
+					name: 'name',
+					username,
+					pass: 'test',
+				})
+				.expect('Content-Type', 'application/json')
+				.expect(200)
+				.expect((res) => {
+					expect(res.body).to.have.property('success', true);
+					expect(res.body).to.have.nested.property('user.username', username);
+					expect(res.body).to.have.nested.property('user.emails[0].address', email);
+					expect(res.body).to.have.nested.property('user.active', true);
+					expect(res.body).to.have.nested.property('user.name', 'name');
+				})
+				.end(done);
+		});
+		it('should return an error when trying register new user with an existing username', (done) => {
+			request.post(api('users.register'))
+				.send({
+					email,
+					name: 'name',
+					username,
+				})
+				.expect('Content-Type', 'application/json')
+				.expect(400)
+				.expect((res) => {
+					expect(res.body).to.have.property('success', false);
+					expect(res.body).to.have.property('error').and.to.be.equal('Username is already in use');
+				})
+				.end(done);
+		});
+	});
+
 	describe('[/users.info]', () => {
 		it('should query information about a user by userId', (done) => {
 			request.get(api('users.info'))
@@ -234,6 +273,17 @@ describe('[Users]', function() {
 				})
 				.end(resolve);
 		});
+		const updatePermission = (permission, roles) => new Promise((resolve) => {
+			request.post(api('permissions.update'))
+				.set(credentials)
+				.send({ permissions: [{ _id: permission, roles }] })
+				.expect('Content-Type', 'application/json')
+				.expect(200)
+				.expect((res) => {
+					expect(res.body).to.have.property('success', true);
+				})
+				.end(resolve);
+		});
 		before((done) => {
 			updateSetting('Accounts_AllowUserProfileChange', true)
 				.then(() => updateSetting('Accounts_AllowUsernameChange', true))
@@ -315,103 +365,223 @@ describe('[Users]', function() {
 		});
 
 		it('should return an error when trying update username and it is not allowed', (done) => {
-			updateSetting('Accounts_AllowUsernameChange', false)
-				.then(() => {
-					request.post(api('users.update'))
-						.set(credentials)
-						.send({
-							userId: targetUser._id,
-							data: {
-								username: 'fake.name',
-							},
-						})
-						.expect('Content-Type', 'application/json')
-						.expect(400)
-						.expect((res) => {
-							expect(res.body).to.have.property('success', false);
-						})
-						.end(done);
-				});
+			updatePermission('edit-other-user-info', ['user']).then(() => {
+				updateSetting('Accounts_AllowUsernameChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									username: 'fake.name',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(400)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', false);
+							})
+							.end(done);
+					});
+			});
+		});
+
+		it('should update the user name when the required permission is applied', (done) => {
+			updatePermission('edit-other-user-info', ['admin']).then(() => {
+				updateSetting('Accounts_AllowUsernameChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									username: 'fake.name',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(200)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', true);
+							})
+							.end(done);
+					});
+			});
 		});
 
 		it('should return an error when trying update user real name and it is not allowed', (done) => {
-			updateSetting('Accounts_AllowRealNameChange', false)
-				.then(() => {
-					request.post(api('users.update'))
-						.set(credentials)
-						.send({
-							userId: targetUser._id,
-							data: {
-								name: 'Fake name',
-							},
-						})
-						.expect('Content-Type', 'application/json')
-						.expect(400)
-						.expect((res) => {
-							expect(res.body).to.have.property('success', false);
-						})
-						.end(done);
-				});
+			updatePermission('edit-other-user-info', ['user']).then(() => {
+				updateSetting('Accounts_AllowRealNameChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									name: 'Fake name',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(400)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', false);
+							})
+							.end(done);
+					});
+			});
+		});
+
+		it('should update user real name when the required permission is applied', (done) => {
+			updatePermission('edit-other-user-info', ['admin']).then(() => {
+				updateSetting('Accounts_AllowRealNameChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									name: 'Fake name',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(200)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', true);
+							})
+							.end(done);
+					});
+			});
 		});
 
 		it('should return an error when trying update user email and it is not allowed', (done) => {
-			updateSetting('Accounts_AllowEmailChange', false)
-				.then(() => {
-					request.post(api('users.update'))
-						.set(credentials)
-						.send({
-							userId: targetUser._id,
-							data: {
-								email: 'itsnotworking@email.com',
-							},
-						})
-						.expect('Content-Type', 'application/json')
-						.expect(400)
-						.expect((res) => {
-							expect(res.body).to.have.property('success', false);
-						})
-						.end(done);
-				});
+			updatePermission('edit-other-user-info', ['user']).then(() => {
+				updateSetting('Accounts_AllowEmailChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									email: 'itsnotworking@email.com',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(400)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', false);
+							})
+							.end(done);
+					});
+			});
+		});
+
+		it('should update user email when the required permission is applied', (done) => {
+			updatePermission('edit-other-user-info', ['admin']).then(() => {
+				updateSetting('Accounts_AllowEmailChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									email: apiEmail,
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(200)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', true);
+							})
+							.end(done);
+					});
+			});
 		});
 
 		it('should return an error when trying update user password and it is not allowed', (done) => {
-			updateSetting('Accounts_AllowPasswordChange', false)
-				.then(() => {
-					request.post(api('users.update'))
-						.set(credentials)
-						.send({
-							userId: targetUser._id,
-							data: {
-								password: 'itsnotworking',
-							},
-						})
-						.expect('Content-Type', 'application/json')
-						.expect(400)
-						.expect((res) => {
-							expect(res.body).to.have.property('success', false);
-						})
-						.end(done);
-				});
+			updatePermission('edit-other-user-password', ['user']).then(() => {
+				updateSetting('Accounts_AllowPasswordChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									password: 'itsnotworking',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(400)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', false);
+							})
+							.end(done);
+					});
+			});
+		});
+
+		it('should update user password when the required permission is applied', (done) => {
+			updatePermission('edit-other-user-password', ['admin']).then(() => {
+				updateSetting('Accounts_AllowPasswordChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									password: 'itsnotworking',
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(200)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', true);
+							})
+							.end(done);
+					});
+			});
 		});
 
 		it('should return an error when trying update profile and it is not allowed', (done) => {
-			updateSetting('Accounts_AllowUserProfileChange', false)
-				.then(() => {
-					request.post(api('users.update'))
-						.set(credentials)
-						.send({
-							userId: targetUser._id,
-							data: {
-								verified: true,
-							},
-						})
-						.expect('Content-Type', 'application/json')
-						.expect(400)
-						.expect((res) => {
-							expect(res.body).to.have.property('success', false);
-						})
-						.end(done);
-				});
+			updatePermission('edit-other-user-info', ['user']).then(() => {
+				updateSetting('Accounts_AllowUserProfileChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									verified: true,
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(400)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', false);
+							})
+							.end(done);
+					});
+			});
+		});
+
+		it('should update profile when the required permission is applied', (done) => {
+			updatePermission('edit-other-user-info', ['admin']).then(() => {
+				updateSetting('Accounts_AllowUserProfileChange', false)
+					.then(() => {
+						request.post(api('users.update'))
+							.set(credentials)
+							.send({
+								userId: targetUser._id,
+								data: {
+									verified: true,
+								},
+							})
+							.expect('Content-Type', 'application/json')
+							.expect(200)
+							.expect((res) => {
+								expect(res.body).to.have.property('success', true);
+							})
+							.end(done);
+					});
+			});
 		});
 	});
 
@@ -867,7 +1037,7 @@ describe('[Users]', function() {
 				})
 				.end(resolve);
 		});
-		const testUsername = `testuser${ +new Date() }`;
+		const testUsername = `testuserdelete${ +new Date() }`;
 		let targetUser;
 		it('register a new user...', (done) => {
 			request.post(api('users.register'))
