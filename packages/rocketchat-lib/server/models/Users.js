@@ -129,7 +129,7 @@ class ModelUsers extends RocketChat.models._Base {
 		return this.find(query, options);
 	}
 
-	doFindByActiveUsersExcept(searchTerm, filters, exceptions, options) {
+	findByActiveUsersExcept(searchTerm, exceptions, options) {
 		if (exceptions == null) { exceptions = []; }
 		if (options == null) { options = {}; }
 		if (!_.isArray(exceptions)) {
@@ -142,12 +142,12 @@ class ModelUsers extends RocketChat.models._Base {
 			acc.push({ [el.trim()]: termRegex });
 			return acc;
 		}, []);
-
-		filters = Object.assign(filters, { active: true, $or: orStmt });
-
 		const query = {
 			$and: [
-				filters,
+				{
+					active: true,
+					$or: orStmt,
+				},
 				{
 					username: { $exists: true, $nin: exceptions },
 				},
@@ -156,14 +156,6 @@ class ModelUsers extends RocketChat.models._Base {
 
 		// do not use cache
 		return this._db.find(query, options);
-	}
-
-	findByActiveUsersExcept(searchTerm, exceptions, options) {
-		return this.doFindByActiveUsersExcept(searchTerm, { federation: { $exists: false } }, exceptions, options);
-	}
-
-	findByFederatedActiveUsersExcept(searchTerm, exceptions, options) {
-		return this.doFindByActiveUsersExcept(searchTerm, { federation: { $exists: true } }, exceptions, options);
 	}
 
 	findUsersByNameOrUsername(nameOrUsername, options) {

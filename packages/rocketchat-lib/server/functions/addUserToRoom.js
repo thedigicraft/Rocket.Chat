@@ -1,4 +1,4 @@
-RocketChat.addUserToRoom = function(rid, user, inviter, silenced, options = {}) {
+RocketChat.addUserToRoom = function(rid, user, inviter, silenced) {
 	const now = new Date();
 	const room = RocketChat.models.Rooms.findOneById(rid);
 
@@ -8,7 +8,7 @@ RocketChat.addUserToRoom = function(rid, user, inviter, silenced, options = {}) 
 		return;
 	}
 
-	if ((room.t === 'c' || room.t === 'p') && !options.skipCallbacks) {
+	if (room.t === 'c' || room.t === 'p') {
 		// Add a new event, with an optional inviter
 		RocketChat.callbacks.run('beforeAddedToRoom', { user, inviter }, room);
 
@@ -44,7 +44,7 @@ RocketChat.addUserToRoom = function(rid, user, inviter, silenced, options = {}) 
 		}
 	}
 
-	if ((room.t === 'c' || room.t === 'p') && !options.skipCallbacks) {
+	if (room.t === 'c' || room.t === 'p') {
 		Meteor.defer(function() {
 			// Add a new event, with an optional inviter
 			RocketChat.callbacks.run('afterAddedToRoom', { user, inviter }, room);
